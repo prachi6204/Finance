@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Tracker</title>
+
+<style>
+:root {
+  --bg: linear-gradient(135deg,#667eea,#764ba2);
+  --card: #fff;
+  --text: #333;
+}
+body.dark {
+  --bg:#1e1e2f;
+  --card:#2c2c3c;
+  --text:#eee;
+}
+body {
+  margin:0;
+  font-family:Arial;
+  background:var(--bg);
+  color:var(--text);
+}
+.container { display:flex; min-height:100vh; }
+.sidebar {
+  width:200px; padding:20px; background:rgba(0,0,0,0.2); color:#fff;
+}
+.sidebar button {
+  width:100%; margin:8px 0; padding:10px; border:none; cursor:pointer;
+}
+.main { flex:1; padding:20px; }
+
+.cards {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;
+}
+.card {
+  background:var(--card);
+  padding:15px;
+  border-radius:10px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.2);
+}
+
+table { width:100%; margin-top:15px; border-collapse:collapse; }
+th,td { padding:8px; border-bottom:1px solid #ccc; }
+
+.modal {
+  display:none; position:fixed; top:0; left:0;
+  width:100%; height:100%; background:rgba(0,0,0,0.5);
+}
+.modal-content {
+  background:#fff; padding:20px; margin:10% auto; width:300px;
+  border-radius:10px;
+}
+
+.progress { height:10px; background:#ddd; border-radius:5px; }
+.progress-bar { height:10px; background:green; width:0%; border-radius:5px; }
+
+@media(max-width:768px){
+  .container{flex-direction:column;}
+  .sidebar{width:100%;}
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="sidebar">
+  <h3>Finance</h3>
+  <button onclick="show('dashboard')">Dashboard</button>
+  <button onclick="show('transactions')">Transactions</button>
+  <button onclick="show('savings')">Savings</button>
+  <button onclick="show('investments')">Investments</button>
+  <button onclick="toggleMode()">🌙 Mode</button>
+  <button onclick="resetData()">Reset</button>
+</div>
+
+<div class="main">
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <h2>Dashboard</h2>
+
+  <input type="month" id="monthPicker">
+
+  <input type="number" id="startBalance" placeholder="Starting Balance">
+  <button onclick="saveStart()">Save</button>
+
+  <div class="cards">
+    <div class="card">Balance ₹<span id="balance"></span></div>
+    <div class="card">Income ₹<span id="income"></span></div>
+    <div class="card">Expense ₹<span id="expense"></span></div>
+    <div class="card">Savings ₹<span id="savings"></span></div>
+    <div class="card">Investment ₹<span id="invest"></span></div>
+  </div>
+</div>
+
+<!-- TRANSACTIONS -->
+<div id="transactions" style="display:none;">
+  <h2>Transactions</h2>
+  <button onclick="openModal()">+ Add</button>
+  <input id="search" placeholder="Search">
+
+  <table>
+    <thead>
+      <tr><th>Type</th><th>Amt</th><th>Cat</th><th>Date</th><th>Delete</th></tr>
+    </thead>
+    <tbody id="list"></tbody>
+  </table>
+</div>
+
+<!-- SAVINGS -->
+<div id="savingsPage" style="display:none;">
+  <h2>Savings Goal</h2>
+  <input id="goal" type="number" placeholder="Set Goal">
+  <button onclick="saveGoal()">Save Goal</button>
+  <div class="progress"><div id="bar" class="progress-bar"></div></div>
+</div>
+
+<!-- INVEST -->
+<div id="investments" style="display:none;">
+  <h2>Investments</h2>
+  Total ₹<span id="invView"></span>
+</div>
+
+</div>
+</div>
+
+<!-- MODAL -->
+<div id="modal" class="modal">
+  <div class="modal-content">
+    <select id="type">
+      <option value="income">Income</option>
+      <option value="expense">Expense</option>
+      <option value="savings">Savings</option>
+      <option value="investment">Investment</option>
+    </select>
+    <input id="amount" type="number" placeholder="Amount">
+    <input id="category" placeholder="Category">
+    <input id="date" type="date">
+    <button onclick="addTransaction()">Add</button>
+    <button onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+
+/* ===== DATA ===== */
+let data = JSON.parse(localStorage.getItem("finance")) || {
+  months:{},
+  currentMonth:new Date().toISOString().slice(0,7)
+};
+
+function saveData(){
+  localStorage.setItem("finance",JSON.stringify(data));
+}
+
+function getMonthData(){
+  if(!data.months[data.currentMonth]){
+    data.months[data.currentMonth]={transactions:[],start:0,goal:0};
+  }
+  return data.months[data.currentMonth];
+}
+
+/* ===== NAV ===== */
+function show(id){
+  document.querySelectorAll(".main > div").forEach(d=>d.style.display="none");
+  document.getElementById(id).style.display="block";
+}
+
+/* ===== MODAL ===== */
+function openModal(){ modal.style.display="block"; }
+function closeModal(){ modal.style.display="none"; }
+
+/* ===== MONTH ===== */
+monthPicker.value = data.currentMonth;
+monthPicker.addEventListener("change", function(){
+  data.currentMonth = this.value;
+  saveData();
+  render();
+});
+
+/* ===== ADD TRANSACTION ===== */
+function addTransaction(){
+  let type = document.getElementById("type").value;
+  let amount = parseFloat(document.getElementById("amount").value);
+  let category = document.getElementById("category").value;
+  let date = document.getElementById("date").value;
+
+  if(!amount || !category) return alert("Fill all fields");
+
+  let m = getMonthData();
+  m.transactions.push({type,amount,category,date});
+
+  saveData();
+  render();
+  closeModal();
+}
+
+/* ===== DELETE ===== */
+function deleteTx(i){
+  getMonthData().transactions.splice(i,1);
+  saveData();
+  render();
+}
+
+/* ===== RENDER ===== */
+function render(){
+  let m = getMonthData();
+
+  let inc=0,exp=0,sav=0,inv=0;
+
+  m.transactions.forEach(t=>{
+    if(t.type==="income") inc+=t.amount;
+    if(t.type==="expense") exp+=t.amount;
+    if(t.type==="savings") sav+=t.amount;
+    if(t.type==="investment") inv+=t.amount;
+  });
+
+  let bal = m.start + inc - exp - sav - inv;
+
+  document.getElementById("income").innerText = inc;
+  document.getElementById("expense").innerText = exp;
+  document.getElementById("savings").innerText = sav;
+  document.getElementById("invest").innerText = inv;
+  document.getElementById("balance").innerText = bal;
+  document.getElementById("invView").innerText = inv;
+
+  let percent = (sav / m.goal) * 100 || 0;
+  document.getElementById("bar").style.width = percent + "%";
+
+  renderTransactions();
+}
+
+/* ===== RENDER TRANSACTIONS ===== */
+function renderTransactions(){
+  let m = getMonthData();
+  let search = document.getElementById("search").value.toLowerCase();
+  let list = document.getElementById("list");
+  list.innerHTML="";
+
+  m.transactions
+  .filter(t=>t.category.toLowerCase().includes(search))
+  .forEach((t,i)=>{
+    list.innerHTML += `
+      <tr>
+        <td>${t.type}</td>
+        <td>${t.amount}</td>
+        <td>${t.category}</td>
+        <td>${t.date}</td>
+        <td><button onclick="deleteTx(${i})">X</button></td>
+      </tr>`;
+  });
+}
+
+/* ===== OTHER ===== */
+function saveStart(){
+  getMonthData().start = parseFloat(document.getElementById("startBalance").value);
+  saveData();
+  render();
+}
+
+function saveGoal(){
+  getMonthData().goal = parseFloat(document.getElementById("goal").value);
+  saveData();
+  render();
+}
+
+function toggleMode(){
+  document.body.classList.toggle("dark");
+}
+
+function resetData(){
+  if(confirm("Reset all data?")){
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+/* ===== INIT ===== */
+render();
+
+</script>
+
+</body>
+</html>
+
